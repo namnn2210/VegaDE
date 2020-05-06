@@ -1,7 +1,6 @@
 from impala.dbapi import connect
 import pandas as pd
 import glob
-from datetime import date
 import os
 
 # Define data path

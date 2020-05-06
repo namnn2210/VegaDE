@@ -23,8 +23,6 @@ def create_args():
 
 
 def impala_connect(impala_host, impala_port, database):
-    print(impala_host)
-    print(impala_port)
     try:
         conn = connect(host=str(args['impalahost']), port=int(args['impalaport']),
                        auth_mechanism='GSSAPI')
@@ -42,6 +40,19 @@ def impala_connect(impala_host, impala_port, database):
 
 def run_cmd(args_list):
     os.system(' '.join(args_list))
+
+# Execute query
+
+
+def execute_query(cursor, query):
+    try:
+        print("===== Execute create query =====")
+        cursor.execute(query)
+        print("Done")
+    except:
+        print("===== Create table failed! =====")
+    finally:
+        cursor.close()
 
 
 # Define file format
@@ -90,10 +101,4 @@ for file in files:
     query += " tblproperties('skip.header.line.count'='1')"
 
     # Execute query
-    try:
-        print("===== Execute create query =====")
-        cursor.execute(query)
-        print("Done")
-        cursor.close()
-    except:
-        print("===== Create table failed! =====")
+    execute_query(cursor, query)

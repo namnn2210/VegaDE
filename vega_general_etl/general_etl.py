@@ -2,39 +2,63 @@ from impala.dbapi import connect
 import pandas as pd
 import glob
 import os
+import argparse
+from pathlib import Path
 
-# Define data path
-folder_name = "/tmp/TaxCode/20200415"
+# Create arguments
 
-# Define file format
-file_format = "/*.csv"
 
-SLASH_PATTERN = "/"
+def create_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-fp', '--folderpath', required=True,
+                    help='Folder path')
+    ap.add_argument('-db', '--database', required=True, help='Database name')
+    ap.add_argument('-ih', '--impalahost', required=True,
+                    help='Impala hostname')
+    ap.add_argument('-ip', '--impalaport', required=True, help='Impala port')
+    args = vars(ap.parse_args())
+    return args
 
-# Define database
-database = "test_data_taxcode"
+# Connect to impala
 
-try:
-    conn = connect(host='node02', port=21050, auth_mechanism='GSSAPI')
-    print("=========== Server connected ==========")
-    cursor = conn.cursor()
-    cursor.execute('CREATE DATABASE IF NOT EXISTS ' + database)
-    cursor.execute('USE ' + database)
-except:
-    print("=========== Connect failed ==========")
+
+def impala_connect(impala_host, impala_port, database):
+    print(impala_host)
+    print(impala_port)
+    try:
+        conn = connect(host=str(args['impalahost']), port=int(args['impalaport']),
+                       auth_mechanism='GSSAPI')
+        print("=========== Server connected ==========")
+        cursor = conn.cursor()
+        cursor.execute('CREATE DATABASE IF NOT EXISTS ' + str(database))
+        cursor.execute('USE ' + str(database))
+        return cursor
+    except:
+        print("=========== Connect failed ==========")
+        return None
+
+# Run OS command
 
 
 def run_cmd(args_list):
     os.system(' '.join(args_list))
 
 
-files = glob.glob(folder_name+file_format)
+# Define file format
+file_format = "/*.csv"
+
+
+args = create_args()
+files = glob.glob(args['folderpath']+file_format)
+cursor = impala_connect(
+    args['impalahost'], args['impalaport'], args['database'])
+
 for file in files:
-    file_path_split = file.split(SLASH_PATTERN)
-    hdfs_date_folder = file_path_split[-2]
-    hdfs_root_folder = file_path_split[-3]
-    file_name = file_path_split[-1]
-    file_name_no_format = file_name.split(".")[0]
+    file_name = os.path.basename(file)
+    file_name_no_format = os.path.splitext(file_name)[0]
+    hdfs_date_folder = os.path.basename(os.path.dirname(file))
+    hdfs_root_folder = os.path.basename(
+        str(Path(os.path.dirname(file)).parent))
 
     # Create folder in HDFS
     # Folder format: <table_name> --> <yyyyMMdd> --> <file_name_folder> --> <file_name>")
@@ -70,5 +94,6 @@ for file in files:
         print("===== Execute create query =====")
         cursor.execute(query)
         print("Done")
+        cursor.close()
     except:
         print("===== Create table failed! =====")

@@ -72,18 +72,18 @@ if __name__ == "__main__":
     db_folder = str(args['database'] + ".db")
     process_date = "process_date=" + file_date
 
-    run_cmd(['hadoop', 'fs', '-mkdir', "/user/hive/warehouse/" +
+    run_cmd(['hdfs', 'dfs', '-mkdir', "/user/hive/warehouse/" +
              db_folder + "/" + root_folder])
-    run_cmd(['hadoop', 'fs', '-mkdir', "/user/hive/warehouse/" +
+    run_cmd(['hdfs', 'dfs', '-mkdir', "/user/hive/warehouse/" +
              db_folder + "/" + root_folder+"/" + process_date])
 
     for file in files:
         file_name = os.path.basename(file)
         file_name_no_format = os.path.splitext(file_name)[0]
-        run_cmd(['hadoop', 'fs', '-copyFromLocal', file, "/user/hive/warehouse/" +
+        run_cmd(['hdfs', 'dfs', '-copyFromLocal', '-f', file, "/user/hive/warehouse/" +
                  db_folder + "/" + root_folder+"/" + process_date])
 
-    df = pd.read_csv(files[0])
+    df = pd.read_csv(files[0], error_bad_lines=False)
 
     query = "CREATE EXTERNAL TABLE IF NOT EXISTS " + \
         root_folder + "("

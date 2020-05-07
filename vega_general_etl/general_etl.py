@@ -67,23 +67,18 @@ cursor = impala_connect(
 for file in files:
     file_name = os.path.basename(file)
     file_name_no_format = os.path.splitext(file_name)[0]
-    hdfs_date_folder = os.path.basename(os.path.dirname(file))
-    hdfs_root_folder = os.path.basename(
-        str(Path(os.path.dirname(file)).parent))
-
+    db_folder = str(args['database']) + ".db"
     # Create folder in HDFS
     # Folder format: <table_name> --> <yyyyMMdd> --> <file_name_folder> --> <file_name>")
     # Create <table_name>
-    run_cmd(['hadoop', 'fs', '-mkdir', "/user/hive/warehouse/"+hdfs_root_folder])
-    # Create <yyyyMMdd>
     run_cmd(['hadoop', 'fs', '-mkdir', "/user/hive/warehouse/" +
-             hdfs_root_folder+"/"+hdfs_date_folder])
+             db_folder])
     # Create <file_name_folder>
     run_cmd(['hadoop', 'fs', '-mkdir', "/user/hive/warehouse/" +
-             hdfs_root_folder+"/"+hdfs_date_folder+"/"+file_name_no_format])
+             db_folder+"/"+file_name_no_format])
     # Copy file from local to HDFS
     run_cmd(['hadoop', 'fs', '-copyFromLocal', file, "/user/hive/warehouse/" +
-             hdfs_root_folder+"/"+hdfs_date_folder+"/"+file_name_no_format])
+             db_folder+"/"+file_name_no_format])
 
     # Read file
     df = pd.read_csv(file, error_bad_lines=False)
@@ -96,8 +91,8 @@ for file in files:
         else:
             query += str(df.columns[i]) + " string, "
     query += " ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' "
-    query += "LOCATION 'hdfs:///user/hive/warehouse/" + hdfs_root_folder + \
-        "/" + hdfs_date_folder + "/" + file_name_no_format + "'"
+    query += "LOCATION 'hdfs:///user/hive/warehouse/" + db_folder + \
+        "/" + file_name_no_format + "'"
     query += " tblproperties('skip.header.line.count'='1')"
 
     # Execute query

@@ -86,7 +86,7 @@ for file in files:
              hdfs_root_folder+"/"+hdfs_date_folder+"/"+file_name_no_format])
 
     # Read file
-    df = pd.read_csv(file)
+    df = pd.read_csv(file, error_bad_lines=False)
 
     # Create query
     query = "CREATE TABLE IF NOT EXISTS " + file_name_no_format + "("

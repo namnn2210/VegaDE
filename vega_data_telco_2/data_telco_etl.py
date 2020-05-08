@@ -169,7 +169,40 @@ def format_phone_no(dataframe):
         phone_head = str(get_phone_col[i])[:2]
         if phone_head == '84':
             get_phone_col[i] = '0' + str(get_phone_col[i])[2:]
+        else:
+            get_phone_col[i] = '0' + str(get_phone_col[i])[2:]
     dataframe['phone'] = get_phone_col
+
+
+# Add columns to dataframe
+def add_columns(dataframe):
+    no_of_column_add = len(sample_columns) - len(dataframe.columns)
+    for i in range(no_of_column_add):
+        dataframe['tmp_col_' + str(no_of_column_add + i)] = ''
+
+
+# Detect column:
+def detect_column(dataframe):
+    list_cities = get_list_cities()
+    count_city = 0
+    list_col = dataframe.columns
+    for i in range(len(list_col)):
+        col_val = dataframe[list_col[i]].astype(str)
+        for val in col_val:
+            try:
+                int(val)
+                dataframe.rename(columns={list_col[i]: 'phone'}, inplace=True)
+                break
+            except ValueError:
+                no_whitespace_val = modify_string(val)
+                remove_accent_str = no_accent_vietnamese(no_whitespace_val)
+                if remove_accent_str in list_cities:
+                    count_city += 1
+                    if count_city >= 4:
+                        dataframe.rename(
+                            columns={list_col[i]: 'city'}, inplace=True)
+                        count_city = 0
+                        break
 
 
 if __name__ == "__main__":
@@ -180,7 +213,6 @@ if __name__ == "__main__":
     create_transformed_folder(args['folderpath'])
     rename_files(raw_files, args['folderpath'])
     renamed_files = get_files(args['folderpath'], file_format)
-    list_cities = get_list_cities()
     for file in renamed_files:
         df = pd.read_excel(file, error_bad_lines=False)
         check_first_col(df)
@@ -189,8 +221,11 @@ if __name__ == "__main__":
             format_phone_no(df)
             print("Correct files")
             write_csv(df, file, str(args['folderpath']))
-        # elif exist_header(df):
-
+        elif exist_header(df):
+            add_columns(df)
+            detect_column(df)
+            print("Added column files")
+            write_csv(df, file, str(args['folderpath']))
         else:
             print("Error files")
             to_error_folder(file, str(args['folderpath']))

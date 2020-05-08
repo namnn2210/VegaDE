@@ -110,7 +110,7 @@ def reorder_value_to_field(spark_dataframe):
                 no_whitespace_val = str(val).replace(" ", "").lower()
                 if (no_whitespace_val.count("/") > 2) or (
                         no_whitespace_val.count(",") > 2) or (no_whitespace_val.count(".") > 2
-                ):
+                                                              ):
                     corrected_col["dia_chi"] = col_val
                     break
                 elif (
@@ -180,7 +180,8 @@ def create_new_col(spark_dataframe):
     if len(df_columns) < 4:
         no_new_col = 4 - len(df_columns)
         for i in range(no_new_col):
-            spark_dataframe = spark_dataframe.withColumn("tmp_col_" + str(4 + i), lit(0))
+            spark_dataframe = spark_dataframe.withColumn(
+                "tmp_col_" + str(4 + i), lit(0))
         return spark_dataframe
     else:
         return spark_dataframe
@@ -209,8 +210,8 @@ def format_phone_no(spark_dataframe):
 
 # Write to CSV
 def write_to_csv(spark_dataframe):
-    spark_dataframe.toPandas().to_csv('data/transformed_data/' + file_table_name + '.csv', index=False)
-
+    spark_dataframe.toPandas().to_csv('data/transformed_data/' +
+                                      file_table_name + '.csv', index=False)
 
 
 cities_path = "cities.xlsx"
@@ -230,7 +231,8 @@ if __name__ == '__main__':
         os.mkdir("data/transformed_data")
 
     for file in files:
-        get_name = no_accent_vietnamese(file.split("data/")[1].split(".")[0].replace(" ", "").lower())
+        get_name = no_accent_vietnamese(file.split(
+            "data/")[1].split(".")[0].replace(" ", "").lower())
         file_table_name = 'data_telco_' + get_name
         data = pd.read_excel(file)
         data_df_spark = spark.createDataFrame(data.astype(str))
@@ -240,7 +242,8 @@ if __name__ == '__main__':
             formatted_col_name_df = format_column_name(checked_first_col_df)
             if get_col_quantity(formatted_col_name_df) == len(schema.fields):
                 formatted_phone_col_df = format_phone_no(formatted_col_name_df)
-                final_dataframe = spark.createDataFrame(reorder_columns(formatted_phone_col_df))
+                final_dataframe = spark.createDataFrame(
+                    reorder_columns(formatted_phone_col_df))
                 write_to_csv(final_dataframe)
             else:
                 reordered_df = reorder_value_to_field(formatted_col_name_df)
@@ -248,6 +251,7 @@ if __name__ == '__main__':
                 write_to_csv(final_dataframe)
         else:
             added_header_df = add_header(checked_first_col_df.toPandas())
-            reordered_df = reorder_value_to_field(spark.createDataFrame(added_header_df.astype(str)))
+            reordered_df = reorder_value_to_field(
+                spark.createDataFrame(added_header_df.astype(str)))
             final_dataframe = format_phone_no(reordered_df)
             write_to_csv(final_dataframe)

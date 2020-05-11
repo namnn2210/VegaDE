@@ -129,7 +129,7 @@ def create_renamed_folder(folderpath):
 
 
 # Create write schema folder
-def create_renamed_folder(folderpath):
+def create_pending_folder(folderpath):
     try:
         os.mkdir(folderpath + '/' + "pending_schema_data")
     except FileExistsError:
@@ -261,6 +261,7 @@ if __name__ == "__main__":
     create_error_folder(args['folderpath'])
     create_transformed_folder(args['folderpath'])
     create_renamed_folder(args['folderpath'])
+    create_pending_folder(args['folderpath'])
     rename_files(raw_files, args['folderpath'])
     renamed_files = get_files(args['folderpath'] + '/' + 'renamed_folder', file_format)
     list_col_tmp = []
@@ -277,7 +278,7 @@ if __name__ == "__main__":
             print("Error files")
             to_error_folder(file, str(args['folderpath']))
     files_for_schema = get_files(args['folderpath'] + '/' + 'pending_schema_data', '/*.csv')
-    # Apply final schema 
+    # Apply final schema
     print("========== Applying schema ==========")
     for file in files_for_schema:
         df = pd.read_csv(file, error_bad_lines=False)
@@ -289,7 +290,6 @@ if __name__ == "__main__":
     shutil.rmtree(args['folderpath'] + '/' + "pending_schema_data")
     # Remove renamed folder
     shutil.rmtree(args['folderpath'] + '/' + "renamed_folder")
-
     print("======================================")
     print("Total files: " + str(len(get_files(args['folderpath'], file_format))))
     print("Transformed files: " + str(len(get_files(args['folderpath'] + '/' + 'transformed_data', '/*.csv'))))

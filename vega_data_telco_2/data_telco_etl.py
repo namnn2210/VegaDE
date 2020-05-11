@@ -4,7 +4,8 @@ import shutil
 import re
 import argparse
 import glob
-
+from pyspark.sql.types import * 
+from pyspark import SparkSession
 
 sample_columns = ['fullname', 'address', 'phone', 'city']
 
@@ -35,12 +36,16 @@ def enough_columns(dataframe):
 
 # Check if file has header
 def exist_header(dataframe):
-    for index in dataframe:
+    count = 0
+    if count == len(dataframe.columns):
+        return True
+    for index in list(dataframe.columns):
         try:
             int(index)
             return False
         except ValueError:
-            return True
+            count += 1
+            continue
 
 
 # Move file to error folder
@@ -55,11 +60,19 @@ def format_column_name(dataframe):
     return dataframe
 
 
-# Write to CSV
-def write_csv(dataframe, file, folderpath):
+# Write to CSV final
+def write_csv_final(dataframe, file, folderpath):
     new_file_name = get_file_name_without_extension(get_file_name(file))
     print(file)
     dataframe.to_csv(folderpath + '/' + "transformed_data/" +
+                     new_file_name + ".csv", index=False)
+
+
+# Write to CSV before schema
+def write_csv_schema(dataframe, file, folderpath):
+    new_file_name = get_file_name_without_extension(get_file_name(file))
+    print(file)
+    dataframe.to_csv(folderpath + '/' + "pending_schema_data/" +
                      new_file_name + ".csv", index=False)
 
 
@@ -99,7 +112,7 @@ def no_accent_vietnamese(s):
 
 # Remove space and lower case
 def modify_string(string):
-    return string.replace(" ", "").lower()
+    return string.replace(" ", "").replace("_","").lower()
 
 
 # Create error folder
@@ -119,6 +132,22 @@ def create_transformed_folder(folderpath):
         shutil.rmtree(folderpath + '/' + "transformed_data")
         os.mkdir(folderpath + '/' + "transformed_data")
 
+# Create renamed folder
+def create_renamed_folder(folderpath):
+    try:
+        os.mkdir(folderpath + '/' + "renamed_folder")
+    except FileExistsError:
+        shutil.rmtree(folderpath + '/' + "renamed_folder")
+        os.mkdir(folderpath + '/' + "renamed_folder")
+
+
+# Create write schema folder
+def create_renamed_folder(folderpath):
+    try:
+        os.mkdir(folderpath + '/' + "pending_schema_data")
+    except FileExistsError:
+        shutil.rmtree(folderpath + '/' + "pending_schema_data")
+        os.mkdir(folderpath + '/' + "pending_schema_data")       
 
 # Rename all files in folder path
 def rename_files(files, folderpath):
@@ -132,12 +161,15 @@ def rename_files(files, folderpath):
                 file_name_split = get_file_name(file).split(' ')
                 separator = '\ '
                 file_name_with_space = separator.join(file_name_split)
-                run_cmd(['mv', args['folderpath']+'/'+file_name_with_space, args['folderpath'] + '/' + "data_telco_" +
+                run_cmd(['cp', args['folderpath']+'/'+file_name_with_space, args['folderpath'] + '/' + 'renamed_folder' + '/' + "data_telco_" +
                          new_file_name + get_file_name_extension(get_file_name(file))])
             else:
-                run_cmd(['mv', file, args['folderpath'] + '/' + "data_telco_" +
+                run_cmd(['cp', file, args['folderpath'] + '/' + 'renamed_folder' + '/' + "data_telco_" +
                          new_file_name + get_file_name_extension(get_file_name(file))])
-
+        else:
+            new_file_name = no_accent_vietnamese(get_file_name(modify_string(file)))
+            run_cmd(['cp', file, args['folderpath'] + '/' + 'renamed_folder' + '/' +
+                         new_file_name])
 
 # Get files from folder:
 def get_files(folderpath, file_format):
@@ -205,27 +237,72 @@ def detect_column(dataframe):
                         break
 
 
+# Create a dictionary to detect column name
+column_detect_dict = {
+    'fullname' : ['fullname','name', 'ten', 'tenkh', 'tentb', 'tentt'],
+    'address' : ['address', 'diachi','diachitt','diachikh', 'diachitb', 'khachhang'],
+    'phone' : ['phone', 'sdt', 'somay', 'matb', 'mobile', 'smdaidien', 'didong', 'sodaidien'],
+    'city' : ['city', 'thanhpho', 'tinh', 'matinh']
+}
+
+
+# Detect column name by dictionary
+def detect_column_by_dict(dataframe):
+    columns = dataframe.columns
+    for column in columns:
+        for key, values in column_detect_dict.items():
+            for value in values:
+                if value == no_accent_vietnamese(modify_string(column)):
+                    dataframe.rename(columns={column:key}, inplace=True)
+
+
+# Get col difference
+def difference_extra_credit(l1,l2):
+    list  = l1 + l2
+    return [value for value in list if (value in l1) ^ (value in l2)]
+
+
+
+def dataframe_process(dataframe,list_col_tmp):
+    detect_column_by_dict(dataframe)
+    new_cols = difference_extra_credit(list_col_tmp,list(dataframe.columns))
+    for col in new_cols:
+        if col not in list_col_tmp:
+            list_col_tmp.append(col)
+    print(list_col_tmp)
+
+def create_schema(schema, list_col_tmp):
+    for col in list_col_tmp:
+        schema.add(col,StringType(),True)
+    schema.fieldNames()
+
 if __name__ == "__main__":
     args = create_args()
     file_format = "/*.xls*"
     raw_files = get_files(args['folderpath'], file_format)
     create_error_folder(args['folderpath'])
     create_transformed_folder(args['folderpath'])
+    create_renamed_folder(args['folderpath'])
     rename_files(raw_files, args['folderpath'])
-    renamed_files = get_files(args['folderpath'], file_format)
+    renamed_files = get_files(args['folderpath'] + '/' + 'renamed_folder', file_format)
+    list_col_tmp = []
     for file in renamed_files:
         df = pd.read_excel(file, error_bad_lines=False)
         check_first_col(df)
-        if enough_columns(df) and exist_header(df):
-            format_column_name(df)
-            format_phone_no(df)
+        bool_exists_header = exist_header(df)
+        if bool_exists_header == None:
+            dataframe_process(df,list_col_tmp)
             print("Correct files")
-            write_csv(df, file, str(args['folderpath']))
-        elif exist_header(df):
-            add_columns(df)
-            detect_column(df)
-            print("Added column files")
-            write_csv(df, file, str(args['folderpath']))
+            write_csv_schema(df, file, str(args['folderpath']))
         else:
             print("Error files")
             to_error_folder(file, str(args['folderpath']))
+    files_for_schema = get_files(args['folderpath'] + '/' + 'pending_schema_data', file_format)
+    schema = StructType()
+    create_schema(schema, list_col_tmp)
+    spark = SparkSession.builder.appName("Data Telco ETL").getOrCreate()
+    for file in files_for_schema:
+        df = pd.read_csv(file, error_bad_lines=False)
+        spark_df = spark.createDataFrame(spark.sparkContext.parallelize(df),schema)
+        write_csv_final(spark_df.toPandas(), file, str(args['folderpath']))
+    

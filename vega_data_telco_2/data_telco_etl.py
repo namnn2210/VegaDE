@@ -5,7 +5,6 @@ import shutil
 import re
 import argparse
 import glob
-from pyspark.sql.types import *
 
 
 # Create arguments
@@ -290,7 +289,7 @@ if __name__ == "__main__":
     shutil.rmtree(args['folderpath'] + '/' + "pending_schema_data")
     # Remove renamed folder
     shutil.rmtree(args['folderpath'] + '/' + "renamed_folder")
-    
+
     print("======================================")
     print("Total files: " + str(len(get_files(args['folderpath'], file_format))))
     print("Transformed files: " + str(len(get_files(args['folderpath'] + '/' + 'transformed_data', '/*.csv'))))

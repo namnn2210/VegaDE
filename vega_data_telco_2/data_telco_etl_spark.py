@@ -6,6 +6,8 @@ import re
 import argparse
 import glob
 from datetime import date, datetime
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
 
 
 # Create arguments
@@ -57,6 +59,14 @@ def write_csv_schema(dataframe, file, folderpath):
     dataframe.to_csv(folderpath + '/' + "pending_schema_data/" +
                      new_file_name + ".csv", index=False)
 
+# Write to CSV before apply schema spark
+def write_csv_schema_spark(folderpath, dataframe, folder_name):
+    dataframe.write.format("csv").save(folderpath + "/" + "pending_schema_data" + "/" + folder_name)
+
+
+# Write to CSV final spark
+def write_csv_final_spark(folderpath, dataframe, carrier_name, today):
+    dataframe.write.mode("append").format("csv").save(folderpath + "/" + "transformed_data" + '/' + carrier_name + '/' + today)
 
 # Get file name
 def get_file_name(path):
@@ -182,7 +192,7 @@ def get_files(folderpath, file_format):
 # Check if first column is index column
 def check_first_col(dataframe):
     if len(str(dataframe.columns[0]).strip()) == 0:
-        return dataframe.__delitem__(df.columns[0])
+        return dataframe.drop(dataframe.columns[0])
     return dataframe
 
 
@@ -200,8 +210,8 @@ def format_phone_no(dataframe):
 
 # Create a dictionary to detect column name
 column_detect_dict = {
-    'fullname': ['fullname', 'name', 'ten', 'tenkh', 'tentb', 'tentt', 'tencq','cusname','coquantt'],
-    'address': ['address', 'diachi', 'diachitt', 'diachikh', 'diachitb', 'khachhang', 'cusaddr'],
+    'fullname': ['fullname', 'name', 'ten', 'tenkh', 'tentb', 'tentt', 'tencq','cusname','coquantt', 'khachhang'],
+    'address': ['address', 'diachi', 'diachitt', 'diachikh', 'diachitb', 'cusaddr'],
     'phone': ['phone', 'sdt', 'somay', 'matb', 'mobile', 'smdaidien', 'didong', 'sodaidien', 'dthoailhe', 'chugoi'],
     'city': ['city', 'thanhpho', 'tinh', 'matinh','exp4']
 }
@@ -210,14 +220,18 @@ column_detect_dict = {
 # Detect column name by dictionary
 def detect_column_by_dict(dataframe):
     columns = dataframe.columns
+    rename_col = {}
     for column in columns:
         for key, values in column_detect_dict.items():
             for value in values:
                 if value == no_accent_vietnamese(modify_string(column)):
-                    dataframe.rename(columns={column: key}, inplace=True)
+                    rename_col[column] = key
+    for column, key in rename_col.items():
+        dataframe = dataframe.withColumnRenamed(column,key)
+    return dataframe
 
 
-# Get col difference
+# Get col differencecol
 def difference_extra_credit(l1, l2):
     list = l1 + l2
     return [value for value in list if (value in l1) ^ (value in l2)]
@@ -225,11 +239,12 @@ def difference_extra_credit(l1, l2):
 
 # Create schema
 def dataframe_process(dataframe, list_col_tmp):
-    detect_column_by_dict(dataframe)
-    new_cols = difference_extra_credit(list_col_tmp, list(dataframe.columns))
+    dataframe = detect_column_by_dict(dataframe)
+    new_cols = difference_extra_credit(list_col_tmp, dataframe.columns)
     for col in new_cols:
         if col not in list_col_tmp:
             list_col_tmp.append(col)
+    return dataframe
 
 
 if __name__ == "__main__":
@@ -237,42 +252,54 @@ if __name__ == "__main__":
     args = create_args()
     file_format = "/*.xls*"
     raw_files = get_files(args['folderpath'], file_format)
-    today = str(date.today().strftime("%Y%m%d")) 
+    today = str(date.today().strftime("%Y%m%d"))
     carrier_name = os.path.basename(args['folderpath']).split("_")[-1]
     create_error_folder(args['folderpath'])
     create_transformed_folder(args['folderpath'])
     create_renamed_folder(args['folderpath'])
     create_pending_folder(args['folderpath'])
-    create_carrier_output_folder(args['folderpath'],carrier_name)
-    create_carrier_today_output_folder(args['folderpath'],carrier_name,today)
+    # create_carrier_output_folder(args['folderpath'],carrier_name)
+    # create_carrier_today_output_folder(args['folderpath'],carrier_name,today)
     rename_files(raw_files, args['folderpath'])
     renamed_files = get_files(args['folderpath'] + '/' + 'renamed_folder', file_format)
+    spark = SparkSession.builder.appName("Spark ETL").getOrCreate()
     list_col_tmp = []
     # Classifying files
     for file in renamed_files:
-        df = pd.read_excel(file, error_bad_lines=False)
-        check_first_col(df)
-        bool_exists_header = exist_header(df)
+        dataframe = pd.read_excel(file, error_bad_lines=False)
+        spark_dataframe = spark.createDataFrame(dataframe.astype(str))
+        spark_dataframe = check_first_col(spark_dataframe)
+        bool_exists_header = exist_header(spark_dataframe)
         if bool_exists_header == None:
-            dataframe_process(df, list_col_tmp)
-            print("Correct files")
-            write_csv_schema(df, file, str(args['folderpath']))
+            spark_dataframe = dataframe_process(spark_dataframe, list_col_tmp)
+            folder_name = get_file_name_without_extension(get_file_name(file)).split("_")[-1]
+            write_csv_schema_spark(args['folderpath'], spark_dataframe, folder_name)
         else:
             print("Error files")
             to_error_folder(file, str(args['folderpath']))
-    files_for_schema = get_files(args['folderpath'] + '/' + 'pending_schema_data', '/*.csv')
+    folder_for_schema = get_files(args['folderpath'] + '/' + 'pending_schema_data', '/*')
+    # Create schema
+    schema = StructType()
+    for col in list_col_tmp:
+        schema.add(col,StringType(), True)
     # Apply final schema
     print("========== Applying schema ==========")
-    for file in files_for_schema:
-        df = pd.read_csv(file, error_bad_lines=False)
-        for col in list_col_tmp:
-            if col not in list(df.columns):
-                df[col] = ''
-        new_df = df[[*sorted(list(df.columns))]]
-        for col in new_df.columns:
+    for folder in folder_for_schema:
+        spark_dataframe = spark.read.load(path=folder + '/*.csv', format="csv",schema=schema)
+        spark_dataframe = spark_dataframe.na.fill('')
+        # spark_dataframe = spark.createDataFrame(spark_dataframe.toPandas(), schema=schema)
+        for col in spark_dataframe.columns:
             if str(col).startswith("Unnamed"):
-                new_df.__delitem__(col)
-        write_csv_final(new_df, file, str(args['folderpath']), carrier_name, today)
+                spark_dataframe = spark_dataframe.drop(col)
+        spark_dataframe.show()
+        write_csv_final_spark(args['folderpath'], spark_dataframe, carrier_name, today)
+    # for file in files_for_schema:
+    #     df = pd.read_csv(file, error_bad_lines=False)
+    #     for col in list_col_tmp:
+    #         if col not in df.columns:
+    #             df[col] = ''
+    #     new_df = df[[*sorted(df.columns)]]
+    #     write_csv_final(new_df, file, str(args['folderpath']), carrier_name, today)
     # Remove pending folder
     shutil.rmtree(args['folderpath'] + '/' + "pending_schema_data")
     # Remove renamed folder

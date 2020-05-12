@@ -5,6 +5,7 @@ import shutil
 import re
 import argparse
 import glob
+from datetime import date
 
 
 # Create arguments
@@ -19,11 +20,6 @@ def create_args():
 # Run OS command
 def run_cmd(args_list):
     os.system(' '.join(args_list))
-
-
-# Get column quantity
-def get_col_quantity(dataframe):
-    return len(dataframe.columns)
 
 
 # Check if file has header
@@ -47,10 +43,10 @@ def to_error_folder(file, folderpath):
 
 
 # Write to CSV final
-def write_csv_final(dataframe, file, folderpath):
+def write_csv_final(dataframe, file, folderpath, carrier_name, today):
     new_file_name = get_file_name_without_extension(get_file_name(file))
     print(file)
-    dataframe.to_csv(folderpath + '/' + "transformed_data/" +
+    dataframe.to_csv(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today + '/' +
                      new_file_name + ".csv", index=False)
 
 
@@ -99,6 +95,23 @@ def no_accent_vietnamese(s):
 # Remove space and lower case
 def modify_string(string):
     return string.replace(" ", "").replace("_", "").lower()
+
+# Create carrier output folder
+def create_carrier_output_folder(folderpath, carrier_name):
+    try:
+        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name)
+    except FileExistsError:
+        shutil.rmtree(folderpath + '/' + "transformed_data" + '/' + carrier_name)
+        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name)
+
+
+# Create carrier output folder
+def create_carrier_today_output_folder(folderpath, carrier_name, today):
+    try:
+        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
+    except FileExistsError:
+        shutil.rmtree(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
+        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
 
 
 # Create error folder
@@ -173,17 +186,6 @@ def check_first_col(dataframe):
     return dataframe
 
 
-# Get list cities:
-def get_list_cities():
-    cities_path = "cities.xlsx"
-    cities_data = pd.read_excel(cities_path)
-    list_cities = []
-    for city in list(cities_data['City']):
-        new_city = no_accent_vietnamese(str(city).replace(" ", "")).lower()
-        list_cities.append(new_city)
-    return list_cities
-
-
 # Format phone number
 def format_phone_no(dataframe):
     get_phone_col = dataframe['phone'].astype(str)
@@ -196,36 +198,12 @@ def format_phone_no(dataframe):
     dataframe['phone'] = get_phone_col
 
 
-# Detect column:
-def detect_column(dataframe):
-    list_cities = get_list_cities()
-    count_city = 0
-    list_col = dataframe.columns
-    for i in range(len(list_col)):
-        col_val = dataframe[list_col[i]].astype(str)
-        for val in col_val:
-            try:
-                int(val)
-                dataframe.rename(columns={list_col[i]: 'phone'}, inplace=True)
-                break
-            except ValueError:
-                no_whitespace_val = modify_string(val)
-                remove_accent_str = no_accent_vietnamese(no_whitespace_val)
-                if remove_accent_str in list_cities:
-                    count_city += 1
-                    if count_city >= 4:
-                        dataframe.rename(
-                            columns={list_col[i]: 'city'}, inplace=True)
-                        count_city = 0
-                        break
-
-
 # Create a dictionary to detect column name
 column_detect_dict = {
-    'fullname': ['fullname', 'name', 'ten', 'tenkh', 'tentb', 'tentt'],
-    'address': ['address', 'diachi', 'diachitt', 'diachikh', 'diachitb', 'khachhang'],
-    'phone': ['phone', 'sdt', 'somay', 'matb', 'mobile', 'smdaidien', 'didong', 'sodaidien'],
-    'city': ['city', 'thanhpho', 'tinh', 'matinh']
+    'fullname': ['fullname', 'name', 'ten', 'tenkh', 'tentb', 'tentt', 'tencq','cusname','coquantt'],
+    'address': ['address', 'diachi', 'diachitt', 'diachikh', 'diachitb', 'khachhang', 'cusaddr'],
+    'phone': ['phone', 'sdt', 'somay', 'matb', 'mobile', 'smdaidien', 'didong', 'sodaidien', 'dthoailhe', 'chugoi'],
+    'city': ['city', 'thanhpho', 'tinh', 'matinh','exp4']
 }
 
 
@@ -258,10 +236,14 @@ if __name__ == "__main__":
     args = create_args()
     file_format = "/*.xls*"
     raw_files = get_files(args['folderpath'], file_format)
+    today = str(date.today().strftime("%Y%m%d")) 
+    carrier_name = os.path.basename(args['folderpath']).split("_")[-1]
     create_error_folder(args['folderpath'])
     create_transformed_folder(args['folderpath'])
     create_renamed_folder(args['folderpath'])
     create_pending_folder(args['folderpath'])
+    create_carrier_output_folder(args['folderpath'],carrier_name)
+    create_carrier_today_output_folder(args['folderpath'],carrier_name,today)
     rename_files(raw_files, args['folderpath'])
     renamed_files = get_files(args['folderpath'] + '/' + 'renamed_folder', file_format)
     list_col_tmp = []
@@ -285,12 +267,13 @@ if __name__ == "__main__":
         for col in list_col_tmp:
             if col not in list(df.columns):
                 df[col] = ''
-        write_csv_final(df, file, str(args['folderpath']))
+        new_df = df[[*sorted(list(df.columns))]]
+        write_csv_final(new_df, file, str(args['folderpath']), carrier_name, today)
     # Remove pending folder
     shutil.rmtree(args['folderpath'] + '/' + "pending_schema_data")
     # Remove renamed folder
     shutil.rmtree(args['folderpath'] + '/' + "renamed_folder")
     print("======================================")
     print("Total files: " + str(len(get_files(args['folderpath'], file_format))))
-    print("Transformed files: " + str(len(get_files(args['folderpath'] + '/' + 'transformed_data', '/*.csv'))))
+    print("Transformed files: " + str(len(get_files(args['folderpath'] + '/' + "transformed_data" + '/' + carrier_name + '/' + today, '/*.csv'))))
     print("Error files: " + str(len(get_files(args['folderpath'] + '/' + 'errors_files', file_format))))

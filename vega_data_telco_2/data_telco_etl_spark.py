@@ -44,21 +44,6 @@ def to_error_folder(file, folderpath):
     run_cmd(['cp', file, folderpath + '/' + 'errors_files'])
 
 
-# Write to CSV final
-def write_csv_final(dataframe, file, folderpath, carrier_name, today):
-    new_file_name = get_file_name_without_extension(get_file_name(file))
-    print(file)
-    dataframe.to_csv(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today + '/' +
-                     new_file_name + ".csv", index=False)
-
-
-# Write to CSV before apply schema
-def write_csv_schema(dataframe, file, folderpath):
-    new_file_name = get_file_name_without_extension(get_file_name(file))
-    print(file)
-    dataframe.to_csv(folderpath + '/' + "pending_schema_data/" +
-                     new_file_name + ".csv", index=False)
-
 # Write to CSV before apply schema spark
 def write_csv_schema_spark(folderpath, dataframe, folder_name):
     dataframe.write.format("csv").save(folderpath + "/" + "pending_schema_data" + "/" + folder_name)
@@ -105,23 +90,6 @@ def no_accent_vietnamese(s):
 # Remove space and lower case
 def modify_string(string):
     return string.replace(" ", "").replace("_", "").lower()
-
-# Create carrier output folder
-def create_carrier_output_folder(folderpath, carrier_name):
-    try:
-        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name)
-    except FileExistsError:
-        shutil.rmtree(folderpath + '/' + "transformed_data" + '/' + carrier_name)
-        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name)
-
-
-# Create carrier output folder
-def create_carrier_today_output_folder(folderpath, carrier_name, today):
-    try:
-        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
-    except FileExistsError:
-        shutil.rmtree(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
-        os.mkdir(folderpath + '/' + "transformed_data" + '/' + carrier_name + '/' + today)
 
 
 # Create error folder
@@ -258,8 +226,6 @@ if __name__ == "__main__":
     create_transformed_folder(args['folderpath'])
     create_renamed_folder(args['folderpath'])
     create_pending_folder(args['folderpath'])
-    # create_carrier_output_folder(args['folderpath'],carrier_name)
-    # create_carrier_today_output_folder(args['folderpath'],carrier_name,today)
     rename_files(raw_files, args['folderpath'])
     renamed_files = get_files(args['folderpath'] + '/' + 'renamed_folder', file_format)
     spark = SparkSession.builder.appName("Spark ETL").getOrCreate()
@@ -287,19 +253,11 @@ if __name__ == "__main__":
     for folder in folder_for_schema:
         spark_dataframe = spark.read.load(path=folder + '/*.csv', format="csv",schema=schema)
         spark_dataframe = spark_dataframe.na.fill('')
-        # spark_dataframe = spark.createDataFrame(spark_dataframe.toPandas(), schema=schema)
         for col in spark_dataframe.columns:
             if str(col).startswith("Unnamed"):
                 spark_dataframe = spark_dataframe.drop(col)
         spark_dataframe.show()
         write_csv_final_spark(args['folderpath'], spark_dataframe, carrier_name, today)
-    # for file in files_for_schema:
-    #     df = pd.read_csv(file, error_bad_lines=False)
-    #     for col in list_col_tmp:
-    #         if col not in df.columns:
-    #             df[col] = ''
-    #     new_df = df[[*sorted(df.columns)]]
-    #     write_csv_final(new_df, file, str(args['folderpath']), carrier_name, today)
     # Remove pending folder
     shutil.rmtree(args['folderpath'] + '/' + "pending_schema_data")
     # Remove renamed folder

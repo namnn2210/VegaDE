@@ -89,9 +89,9 @@ if __name__ == "__main__":
         root_folder + "("
     for i in range(len(df.columns)):
         if i == len(df.columns) - 1:
-            query += str(df.columns[i]) + " string)"
+            query += "`" + str(df.columns[i]) + "`" + " string)"
         else:
-            query += str(df.columns[i]) + " string, "
+            query += "`" + str(df.columns[i]) + "`" + " string, "
     query += " PARTITIONED BY (process_date string)"
     query += " ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' "
     query += "LOCATION 'hdfs:///user/hive/warehouse/" + \
